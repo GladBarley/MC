@@ -1,6 +1,4 @@
-Hier ist ein Entwurf für eine strukturierte und professionelle `README.md`, die direkt für dein GitHub-Repository verwendet werden kann.
 
----
 
 # Mikrocontroller-Praktikum: AVR-C Line Follower
 
