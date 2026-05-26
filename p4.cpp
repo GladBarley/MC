@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <util/delay.h>
 #include <avr/eeprom.h>
-#include <stdbool.h> // Hinzugefügt für Datentyp bool
+#include <stdbool.h> 
 
 // Globale Variablen (Typen korrigiert für 10-Bit ADC und Vorzeichen)
 static uint16_t breakPoint; 
@@ -68,9 +68,9 @@ void SetMotor(uint8_t motor, int16_t set_speed) {
         
         // PWM-Duty-Cycle aktualisieren
         OCR1A = pwm_val;
-        currSpeedM1 = set_speed; // Korrigiert: Speichere den echten Wert inkl. Vorzeichen
+        currSpeedM1 = set_speed; // Speichere den echten Wert
     }
-    else if (motor == 0) { // Korrigiert: In main() wird Motor 0 aufgerufen, nicht 2
+    else if (motor == 0) {
         // H-Brücke schonen: Totzeit
         if((currSpeedM2 < 0 && set_speed > 0) || (currSpeedM2 > 0 && set_speed < 0)) {
             SetMotor(0, 0);
@@ -85,7 +85,7 @@ void SetMotor(uint8_t motor, int16_t set_speed) {
         }
         
         OCR1B = pwm_val;
-        currSpeedM2 = set_speed; // Korrigiert: Speichere den echten Wert inkl. Vorzeichen
+        currSpeedM2 = set_speed;
     }
 }
 
