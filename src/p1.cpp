@@ -8,7 +8,7 @@ const static uint8_t SWITCH0=(1<<PD1);
 const static uint8_t SWITCH1=(1<<PD2);
 const static uint8_t SWITCH2=(1<<PD3);
 
-static uint8_t LED0=(1<<PD5);
+const static uint8_t LED0=(1<<PD5);
 const static uint8_t LED1=(1<<PD6);
 const static uint8_t LED2=(1<<PD7);
 
@@ -16,9 +16,9 @@ const static uint8_t LED3=(1<<PB0);
 const static uint8_t LED4=(1<<PB1);
 const static uint8_t LED5=(1<<PB2);
 const static uint8_t LED6=(1<<PB3);
-static uint8_t LED7=(1<<PB4);
+const static uint8_t LED7=(1<<PB4);
 
-const static uint8_t ledArr[8] = {LED0, LED1, LED2, LED3, LED4, LED5, LED6, LED7};
+static uint8_t ledArr[8] = {LED0, LED1, LED2, LED3, LED4, LED5, LED6, LED7};
 static int delay = 500;
 
 int switchOn(int led) {
@@ -87,7 +87,9 @@ while(1) {
 ISR(INT1_vect) {
     _delay_ms(5);
     if (SWITCH2 == 0) {
-        LED0 = 00000000; // 0000 0000 xor 1010 1010 == 1010 1010
-        LED7 = 00000000;
+        switchOff(0);
+        switchOff(7);
+        ledArr[0] = 00000000; // 0000 0000 xor 1010 1010 == 1010 1010
+        ledArr[7] = 00000000;
     }
 }
