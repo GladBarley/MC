@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+.vscode/launch.json
+.vscode/c_cpp_properties.json
+.pio/build/project.checksum
+.pio/build/nanoatmega328/idedata.json
