@@ -8,29 +8,29 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/Users/jannik/Documents/PlatformIO/Projects/MC/include",
-                "/Users/jannik/Documents/PlatformIO/Projects/MC/src",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/cores/arduino",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/HID/src",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
-                "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                "/home/z/Code/MC/include",
+                "/home/z/Code/MC/src",
+                "/home/z/.platformio/packages/framework-arduino-avr/cores/arduino",
+                "/home/z/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                "/home/z/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                "/home/z/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                "/home/z/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                "/home/z/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                "/home/z/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                 ""
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/Users/jannik/Documents/PlatformIO/Projects/MC/include",
-                    "/Users/jannik/Documents/PlatformIO/Projects/MC/src",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/cores/arduino",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/HID/src",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
-                    "/Users/jannik/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                    "/home/z/Code/MC/include",
+                    "/home/z/Code/MC/src",
+                    "/home/z/.platformio/packages/framework-arduino-avr/cores/arduino",
+                    "/home/z/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                    "/home/z/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                    "/home/z/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                    "/home/z/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                    "/home/z/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                    "/home/z/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
                     ""
                 ]
             },
@@ -45,7 +45,7 @@
             ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++11",
-            "compilerPath": "/Users/jannik/.platformio/packages/toolchain-atmelavr/bin/avr-gcc",
+            "compilerPath": "/home/z/.platformio/packages/toolchain-atmelavr/bin/avr-gcc",
             "compilerArgs": [
                 "-mmcu=atmega328p",
                 ""
