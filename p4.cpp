@@ -1,200 +1,117 @@
+#define F_CPU 16000000UL 
 #include <avr/io.h>
-#include <stdio.h>
-#include <util/delay.h>
 #include <avr/eeprom.h>
-#include <stdbool.h> 
+#include <util/delay.h>
+#include <stdio.h>
 
-// Globale Variablen (Typen korrigiert für 10-Bit ADC und Vorzeichen)
-static uint16_t breakPoint; 
-static uint8_t speed;
-static int16_t currSpeedM1; 
-static int16_t currSpeedM2;
-
-#define MIN_OUTPUT 0
-#define MAX_OUTPUT 255
-#define PD 0.05
-
-// Funktionsprototypen
-uint16_t ReadADCSingleConversion(uint8_t channel);
-void InitMotors(void);
-void SetMotor(uint8_t motor, int16_t speed);
-void initInterrupt(void);
-int readPoti(void);
-
-void InitMotors(void) {
-    // PB0-PB3 als Ausgang für PWM und Drehrichtung
-    DDRB |= (1 << PB0) | (1 << PB1) | (1 << PB2) | (1 << PB3); 
-    
-    // Timer 1: 8-Bit Fast PWM, Non-inverting (Pin geht auf LOW bei Match)
-    TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
-    // Prescaler auf 64
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
-    
-    // Initiale Pulsweite auf 0 (Motor aus)
-    OCR1A = 0; 
-    OCR1B = 0; 
+void InitUSART(uint32_t baud_rate) {
+    uint16_t ubrr_val = (F_CPU - 8 * baud_rate) / (16 * baud_rate); 
+    UBRR0 = ubrr_val;
+    UCSR0B = (1 << RXEN0) | (1 << TXEN0);
+    UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);
 }
 
-void SetMotor(uint8_t motor, int16_t set_speed) {
-    // Geschwindigkeit auf zulässigen 8-Bit PWM-Bereich limitieren
-    if (set_speed > 255) set_speed = 255;
-    if (set_speed < -255) set_speed = -255;
+void TransmitByte(uint8_t data) {
+    do {} while (!(UCSR0A & (1 << UDRE0)));
+    UDR0 = data;
+}
 
-    uint8_t pwm_val = 0;
-    uint8_t dir_forward = 0;
+void TransmitString(const char* my_string) {
+    uint16_t i = 0;
+    while (my_string[i] != '\0') { TransmitByte(my_string[i]); i++; }
+}
 
-    // Betrag (PWM) und Richtungszustand extrahieren
-    if (set_speed > 0) {
-        pwm_val = set_speed;
-        dir_forward = 1;
-    } else if (set_speed < 0) {
-        pwm_val = -set_speed;
-        dir_forward = 0;
-    }
-
-    if (motor == 1) {
-        // H-Brücke schonen: Totzeit bei abruptem Richtungswechsel
-        if((currSpeedM1 < 0 && set_speed > 0) || (currSpeedM1 > 0 && set_speed < 0)) {
-            SetMotor(1, 0);
-            _delay_ms(100);
-        }
-        
-        // Drehrichtung über Pin PB0 setzen
-        if (!dir_forward) {    
-            PORTB |= (1 << PB0); 
-        } else {
-            PORTB &= ~(1 << PB0);
-        }
-        
-        // PWM-Duty-Cycle aktualisieren
-        OCR1A = pwm_val;
-        currSpeedM1 = set_speed; // Speichere den echten Wert
-    }
-    else if (motor == 0) {
-        // H-Brücke schonen: Totzeit
-        if((currSpeedM2 < 0 && set_speed > 0) || (currSpeedM2 > 0 && set_speed < 0)) {
-            SetMotor(0, 0);
-            _delay_ms(100);
-        }
-        
-        // Drehrichtung über Pin PB3 setzen
-        if (dir_forward) {
-            PORTB |= (1 << PB3);
-        } else {
-            PORTB &= ~(1 << PB3);
-        }
-        
-        OCR1B = pwm_val;
-        currSpeedM2 = set_speed;
-    }
+void InitADC(void) {
+    ADMUX = (1 << REFS0);
+    ADCSRA = (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+    ADCSRA |= (1 << ADEN);
+    ADCSRA |= (1 << ADSC);
+    do {} while (ADCSRA & (1 << ADSC));
+    uint16_t garbage = ADC; 
 }
 
 uint16_t ReadADCSingleConversion(uint8_t channel) {
-    // Gewünschten ADC-Kanal wählen, Referenzspannungs-Konfiguration beibehalten
-    ADMUX = (ADMUX & 0xF0) | (channel & 0x0F); 
-    
-    // Messung starten
+    const uint8_t kMuxMask = ((1 << MUX0) | (1 << MUX1) | (1 << MUX2) | (1 << MUX3));
+    ADMUX &= ~kMuxMask; 
+    ADMUX |= channel;   
     ADCSRA |= (1 << ADSC);
-    
-    // Warten, bis das Hardware-Bit gelöscht wird (Messung fertig)
-    while (ADCSRA & (1 << ADSC));
-    
-    // 10-Bit ADC-Wert zurückgeben
+    do {} while (ADCSRA & (1 << ADSC));
     return ADC;
 }
 
-void initInterrupt() {
-    // PD2 (INT0), PD4 und PD5 als Eingänge setzen und Pull-Ups aktivieren
-    DDRD &= ~((1 << PD2) | (1 << PD4) | (1 << PD5));
-    PORTD |= (1 << PD2) | (1 << PD4) | (1 << PD5);
-    
-    // INT0 auf fallende Flanke konfigurieren
-    EICRA |= (1 << ISC01); 
-    EIMSK |= (1 << INT0);  
-    
-    // Globale Interrupts freigeben
-    sei();
+int16_t last_m1 = 0;
+int16_t last_m2 = 0;
+
+void setMotor(uint8_t motor, int16_t speed) {
+    if (speed > 255) speed = 255;
+    if (speed < -255) speed = -255;
+
+    if (motor == 1) {
+        if ((last_m1 > 0 && speed < 0) || (last_m1 < 0 && speed > 0)) { OCR1A = 0; _delay_ms(50); }
+        
+        // --- SOFTWARE-INVERTIERUNG MOTOR 1 ---
+        // Falls er falsch rum dreht, vertausche die Zeilen bei "speed >= 0" und "else"
+        if (speed >= 0) { PORTB &= ~(1 << PORTB0); OCR1A = speed; } 
+        else { PORTB |= (1 << PORTB0); OCR1A = -speed; }
+        
+        last_m1 = speed;
+    } else {
+        if ((last_m2 > 0 && speed < 0) || (last_m2 < 0 && speed > 0)) { OCR1B = 0; _delay_ms(50); }
+        
+        // --- SOFTWARE-INVERTIERUNG MOTOR 2 ---
+        // Falls er falsch rum dreht, vertausche die Zeilen bei "speed >= 0" und "else"
+        if (speed >= 0) { PORTB &= ~(1 << PORTB3); OCR1B = speed; }
+        else { PORTB |= (1 << PORTB3); OCR1B = -speed; }
+        
+        last_m2 = speed;
+    }
 }
 
-// Interrupt-Service-Routine für den externen Interrupt 0 (Kalibrierung)
-ISR(INT0_vect) {
-    uint16_t left = ReadADCSingleConversion(0);
-    uint16_t right = ReadADCSingleConversion(1);
-    
-    // Mittelwert abzüglich Offset als Schwellenwert berechnen
-    breakPoint = ((right + left) / 2) - 400;
-    
-    // Als 16-Bit-Wert (Word) netzausfallsicher im EEPROM speichern
-    eeprom_update_word((uint16_t*)0, breakPoint);
-}
 
-int readPoti() {
-    // ADC-Wert (0-1023) durch 4 teilen, um auf 8-Bit (0-255) für PWM zu skalieren
-    return ReadADCSingleConversion(7) / 4;
-}
+uint16_t EEMEM eeprom_threshold = 300; 
 
 int main(void) {
-    InitMotors();
-    initInterrupt();
-    bool lineFollower;
+    InitUSART(9600);
+    InitADC();
     
-    // Betriebsmodus über Pin PD4 einlesen (LOW-aktiv durch Pull-Up)
-    if (PIND & (1 << PD4)) {
-        lineFollower = false;
-    } else {
-        lineFollower = true;
-    }
+    // PWM Konfig (Timer 1)
+    TCCR1A = (1 << COM1A1) | (1 << COM1B1) | (1 << WGM10);
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    DDRB |= (1 << DDB1) | (1 << DDB0) | (1 << DDB2) | (1 << DDB3);
 
-    // Gespeicherten Schwellenwert auslösen und Grundgeschwindigkeit setzen
-    breakPoint = eeprom_read_word((uint16_t*)0);
-    speed = readPoti();
+    // Taster (PD2) und Jumper (PD4) als Eingang
+    DDRD &= ~((1 << DDD4) | (1 << DDD2));
+    PORTD |= (1 << PORTD4) | (1 << PORTD2); 
 
-    // Modus 1: Bang-Bang-Regelung (Zweipunktregler)
-    while(lineFollower) {
-        // Korrigiert: Datentyp uint16_t für 10-Bit ADC
-        uint16_t left = ReadADCSingleConversion(0);
-        uint16_t right = ReadADCSingleConversion(1);
-        
-        if (left < breakPoint && right < breakPoint) {
-            // Auf der Linie: Beide Motoren Vollgas
-            SetMotor(1, speed);
-            SetMotor(0, speed);
-        } else if (left < breakPoint && right > breakPoint) {
-            // Linie rechts verlassen: Links drosseln
-            SetMotor(1, speed/10);
-            SetMotor(0, speed);
-        } else {
-            // Linie links verlassen: Rechts drosseln
-            SetMotor(1, speed);
-            SetMotor(0, speed/10);
-        }
-    }
-    
-    // Variablen für den P-Regler (signed, da Fehler/Lenkung negativ sein können)
-    int16_t error;
-    int16_t steering;
+    uint16_t white_val = eeprom_read_word(&eeprom_threshold);
 
-    // Modus 2: Proportional-Regelung
-    while(!lineFollower){
-        uint16_t left = ReadADCSingleConversion(0);
-        
-        // Regelabweichung (Error) berechnen
-        error = left - breakPoint;
-        
-        // Stellgröße berechnen (P-Anteil)
-        steering = error * PD; 
-        // alternativ steering = (error * 5) / 100 für bessere performance
-        
-        // Lenkeinschlag begrenzen
-        if (steering < MIN_OUTPUT) {
-            steering = MIN_OUTPUT;
-        } else if (steering > MAX_OUTPUT) {
-            steering = MAX_OUTPUT;
+    while(1) {
+        // A) KALIBRIERUNG
+        if (!(PIND & (1 << PIND2))) {
+            white_val = (ReadADCSingleConversion(0) + ReadADCSingleConversion(1)) / 2 + 150;
+            eeprom_write_word(&eeprom_threshold, white_val);
+            TransmitString("Kalibriert!\r\n");
+            _delay_ms(500);
         }
 
-        // Lenkmanöver auf Motoren verteilen (Differenzsteuerung)
-        SetMotor(1, speed - steering);
-        SetMotor(0, speed + steering);
+        // B) SENSOREN & LOGIK
+        uint16_t s1 = ReadADCSingleConversion(0);
+        uint16_t s2 = ReadADCSingleConversion(1);
+        int16_t base = ReadADCSingleConversion(7) / 4;
+
+        // C) REGELUNG
+        if (!(PIND & (1 << PIND4))) { // Jumper auf GND -> P-Regelung
+            int16_t err = (int16_t)s1 - (int16_t)s2;
+            setMotor(1, base - (err / 10)); 
+            setMotor(2, base + (err / 10));
+        } else { // Kein Jumper -> Bang-Bang
+            // HINWEIS: Wenn er die Linie verliert, ändere hier die Vergleichsoperatoren < oder >
+            // Schwarz = niedriger Wert, Weiß = hoher Wert (oder umgekehrt, je nach Sensor-Modul)
+            if (s1 < white_val && s2 < white_val) { setMotor(1, base); setMotor(2, base); }
+            else if (s1 < white_val) { setMotor(1, 0); setMotor(2, base); }
+            else if (s2 < white_val) { setMotor(1, base); setMotor(2, 0); }
+            else { setMotor(1, -base); setMotor(2, -base); }
+        }
+        _delay_ms(10);
     }
-    return 0;
 }
