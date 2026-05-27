@@ -103,6 +103,15 @@ uint16_t ReadADCSingleConversion(uint8_t channel) {
     return ADC;
 }
 
+void InitADC(void) {
+    // VCC (5V) als Referenzspannung wählen (REFS0 = 1)
+    ADMUX = (1 << REFS0);
+    
+    // ADC aktivieren (ADEN = 1) & Frequenzteiler auf 128 setzen 
+    // (16MHz / 128 = 125kHz, perfekt für die ADC-Genauigkeit)
+    ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);
+}
+
 void initInterrupt() {
     // PD2 (INT0), PD4 und PD5 als Eingänge setzen und Pull-Ups aktivieren
     DDRD &= ~((1 << PD2) | (1 << PD4) | (1 << PD5));
@@ -134,6 +143,7 @@ int readPoti() {
 }
 
 int main(void) {
+    InitADC();
     InitMotors();
     initInterrupt();
     bool lineFollower;

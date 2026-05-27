@@ -39,3 +39,4 @@
 .pio/build/nanoatmega328/idedata.json
 .pio/build/project.checksum
 .pio/build/project.checksum
+.DS_Store
