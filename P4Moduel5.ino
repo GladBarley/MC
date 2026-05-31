@@ -1,4 +1,25 @@
+#ifndef F_CPU
+#define F_CPU 16000000UL // Fallback, falls in platformio.ini nicht definiert
+#endif
 
+#include <stdint.h>
+#include <avr/interrupt.h>
+#include <avr/io.h>
+#include <avr/eeprom.h>
+#include <util/delay.h>  // Für _delay_ms()
+#include <stdlib.h>      // Für itoa(), abs(), dtostrf()
+#include <math.h>        // Für isnan()
+
+// --- Pin- und Modus-Definitionen ---
+#define MODE_PIN  4      // Beispiel: PD4 (Bitte ggf. anpassen)
+#define CALIB_PIN 5      // Beispiel: PD5 (Bitte ggf. anpassen)
+
+const int8_t P = 0;
+const int8_t BangBang = 1;
+
+// --- Enums und globale Zustände ---
+enum Motor { M1 = 0, M2 = 1 };
+int8_t current_dir[2] = {0, 0}; // Speichert die aktuelle Richtung der Motoren (0=Stop, 1=Vorwärts, 2=Rückwärts)
 
 const int16_t PWM_FREQ = 15999;
 const int16_t kBaud = 9600;
@@ -9,13 +30,50 @@ volatile float Kp = 0.00166;       // *10^-1
 uint16_t threshold = 600;
 int8_t rMode = 0;
 
+uint16_t EEMEM eeprom_threshold;
+float EEMEM eeprom_kp;
+
+// --- Funktionsprototypen (Vorwärtsdeklarationen) ---
+void InitUSART(uint32_t baud_rate);
+void initTimer1(void);
+void stop_motors(void);
+void InitADC(uint8_t channel);
+uint16_t ReadADCSingleConversion(uint8_t channel);
+void TransmitString(const char* my_string);
+void TransmitByte(uint8_t data);
+uint8_t ReceiveByte(void);
+void TransmitUint16(uint16_t value);
+void TransmitInt16(int16_t value);
+void TransmitFloat(float value);
+uint8_t eval_Sensor_Val(int16_t value, int16_t threshold, int16_t accuracy);
+float pRegler(int16_t istwertPU1, int16_t istwertPU2, float Kp);
+void p_control_mode(uint16_t base_speed);
+void calibrate_safe_threshold_kp(void);
+void flash_led(uint8_t times);
+void save_kp(float value);
+float load_kp(void);
+void save_threshold(uint16_t value);
+uint16_t load_threshold(void);
+void calibrate_safe_threshold(void);
+uint16_t calibrate_threshold(void);
+void bang_bang_mode(uint16_t speed);
+void ctrlMotor(enum Motor i_Motor, uint8_t i_Motor_Speed);
+void set_forward(enum Motor i_Motor);
+void set_backward(enum Motor i_Motor);
+void drive_forward(uint8_t speed);
+void drive_backward(uint8_t speed);
+void turn_left(uint8_t speed);
+void turn_right(uint8_t speed);
+void setTimerDC(enum Motor i_Motor, int dutyCycle);
+
+// --- Implementierungen ---
+
 int8_t initc(void){
   InitUSART(kBaud);
   initTimer1();
   stop_motors();
   InitADC(PU1);
   InitADC(PU2);
-
 
   // PD4 als Eingang
   DDRD &= ~(1 << MODE_PIN);
@@ -88,15 +146,15 @@ void TransmitString(const char* my_string) {
 }
 
 void TransmitUint16(uint16_t value){
-    char buffer[6]; // 6 Zeichen, da Intager max 5 Zeichen + Null Terminator
-    itoa(value, buffer, 10); // Wandelt Zahl in einen String in Dezimalen Zahlensystem
+    char buffer[6]; 
+    itoa(value, buffer, 10); 
     TransmitString(buffer);
     TransmitByte('\n');
 }
 
 void TransmitInt16(int16_t value){
-    char buffer[7]; // 7 characters: '-' + max 5 digits + null terminator
-    itoa(value, buffer, 10); // itoa handles signed integers correctly
+    char buffer[7]; 
+    itoa(value, buffer, 10); 
     TransmitString(buffer);
     TransmitByte('\n');
 }
@@ -108,15 +166,9 @@ void TransmitFloat(float value){
     TransmitByte('\n');
 }
 
-
-
-uint16_t EEMEM eeprom_threshold;
-float EEMEM eeprom_kp;
-
 //-----------------------------------------------------
 // P - REGELUNG
 //-----------------------------------------------------
-
 
 uint8_t eval_Sensor_Val(int16_t value, int16_t threshold, int16_t accuracy){
     uint8_t result  = (value >  (threshold - (threshold/100*accuracy)));
@@ -129,26 +181,16 @@ float pRegler(int16_t istwertPU1, int16_t istwertPU2, float Kp){
 
     // Berechung der Regeldifferenz
     fehler = istwertPU1 - istwertPU2;   
-    //TransmitString("fehler\n");
-    //TransmitInt16(fehler);
     
     // Berechung des Ausgangswertes der Regeung
     stellgroesse = (Kp * static_cast<float>(fehler)) ;
-    //TransmitString("Stellgröße\n");
-    //TransmitFloat(stellgroesse);
     return stellgroesse;
 }
-
-/* -----------------------------
-   P-Regelungsmodus
------------------------------ */
 
 void p_control_mode(uint16_t base_speed){
     // Clamp base_speed to 0-1024 for safety
     if(base_speed > 1024) base_speed = 1024;
     
-    //TransmitString("base_speed\n");
-    //TransmitUint16(base_speed);
     int16_t sensor_left;
     int16_t sensor_right;
 
@@ -166,21 +208,10 @@ void p_control_mode(uint16_t base_speed){
     uint8_t left_black  = eval_Sensor_Val(sensor_left,threshold,1);
     uint8_t right_black = eval_Sensor_Val(sensor_right,threshold,1);
 
-   /* TransmitString("sensor_left\n");
-    TransmitUint16(sensor_left);
-    TransmitString("sensor_right\n");
-    TransmitUint16(sensor_right);
-    TransmitString("left_black\n");
-    TransmitUint16(left_black);
-    TransmitString("right_black\n");
-    TransmitUint16(right_black);*/
-
     if(left_black || right_black)
     {
         // P-Regler aufrufen
         correction = pRegler(sensor_left, sensor_right, Kp);
-        //TransmitString("correction\n");
-        //TransmitFloat(correction);
         if(correction > 1.0f) correction = 1.0f;   // Begrenzung der Korrektur auf max 100%
         if(correction < -1.0f) correction = -1.0f;
 
@@ -188,37 +219,23 @@ void p_control_mode(uint16_t base_speed){
         left_speed_float  = (1.0 - correction) * base_speed;
         right_speed_float = (1.0 + correction) * base_speed;
 
-        //TransmitString("left_speed_float\n");
-        //TransmitFloat(left_speed_float);
-        //TransmitString("right_speed_float\n");
-        //TransmitFloat(right_speed_float);
-
         // Round floats and convert to int16_t with bounds checking
-        left_speed  = (int16_t)(left_speed_float + 0.5);   // Round: add 0.5 then truncate
-        right_speed = (int16_t)(right_speed_float + 0.5);  // Round: add 0.5 then truncate
+        left_speed  = (int16_t)(left_speed_float + 0.5);   
+        right_speed = (int16_t)(right_speed_float + 0.5);  
 
         // Begrenzung Motoren auf 0-1024 (after rounding)
-        if(left_speed < 0)
-            left_speed = 0;
-        if(left_speed > 1024)
-            left_speed = 1024;
+        if(left_speed < 0) left_speed = 0;
+        if(left_speed > 1024) left_speed = 1024;
 
-        if(right_speed < 0)
-            right_speed = 0;
-        if(right_speed > 1024)
-            right_speed = 1024;
-
-        //TransmitString("left_speed\n");
-        //TransmitInt16(left_speed);
-        //TransmitString("right_speed\n");
-        //TransmitInt16(right_speed);
+        if(right_speed < 0) right_speed = 0;
+        if(right_speed > 1024) right_speed = 1024;
 
         // beide Vorwärts
         set_forward(M1);
         set_forward(M2);
 
-        ctrlMotor(M1, (uint8_t)left_speed);   // Cast to uint8_t only for function call
-        ctrlMotor(M2, (uint8_t)right_speed);  // Cast to uint8_t only for function call
+        ctrlMotor(M1, (uint8_t)left_speed);   
+        ctrlMotor(M2, (uint8_t)right_speed);  
     }
     else
     {
@@ -229,9 +246,8 @@ void p_control_mode(uint16_t base_speed){
         ctrlMotor(M1, base_speed);
         ctrlMotor(M2, base_speed);
     }
-    //TransmitString("----\n");
-    //TransmitString("----\n");
 }
+
 void calibrate_safe_threshold_kp(void){
     uint16_t whitethreshold;
     uint16_t diff_thershold;
@@ -291,35 +307,12 @@ float load_kp(void) {
     if(isnan(val)){
         return 0.005; 
     }
-
     return val; 
 } 
 
 //-----------------------------------------------------
 // Bang - Bang - Steuerung
 //-----------------------------------------------------
-
-
-
-
-void initTimer1(){
-    TCCR1A |= (1<<COM1A1) | (1<<COM1B1) | (1<<WGM11);
-    TCCR1B |= (1<<WGM13) | (1<<WGM12) | (1<<CS11); // prescaler = 8
-    ICR1 = PWM_FREQ; // PWM frequency = (16000000 Hz)/8/(TOP+1) = (1000 Hz)/8 = 125 Hz
-    OCR1A = 0; // duty cycle for pin OC1A (PB1) = 3999/15999 = 25%, assuming ICR1 = 15999
-    OCR1B = 0; // duty cycle for pin OC1B (PB2) = 11999/15999 = 75%, assuming ICR1 = 1599
-    DDRB |= (1 << PB0) | (1<<PB1) | (1<<PB2) | (1<< PB3); // output pins, globally set above already
-}
-
-void setTimerDC(enum Motor i_Motor, int dutyCycle){
-    switch (i_Motor){
-    case M1:    OCR1A = dutyCycle; // duty cycle for pin OC1A (PB1) = 3999/15999 = 25%, assuming ICR1 = 15999
-                break;
-    case M2:    OCR1B = dutyCycle; // duty cycle for pin OC1B (PB2) = 11999/15999 = 75%, assuming ICR1 = 1599
-                break;
-    default: TransmitString("No Motor selected\n");
-    };
-}
 
 /* ----------------------------- EEPROM ----------------------------- */ 
 void save_threshold(uint16_t value) { 
@@ -332,7 +325,6 @@ uint16_t load_threshold(void) {
     if(val == 0xFFFF){
         return 500; 
     }
-
     return val; 
 } 
     
@@ -388,29 +380,23 @@ void bang_bang_mode(uint16_t speed){
 
     if(left_black && right_black)
     {
-        //TransmitString("forward\n");
         drive_forward(speed);
     }
     else if(left_black && !right_black)
     {
-        //TransmitString("left\n");
         turn_left(speed);
     }
     else if(!left_black && right_black)
     {
-        //TransmitString("right\n");
         turn_right(speed);
     }
     else
     {
-       //TransmitString("back\n");
         drive_backward(speed);
     }
-    //_delay_ms(10);
 }
 
 void ctrlMotor(enum Motor i_Motor, uint8_t i_Motor_Speed){
-
     setTimerDC(i_Motor,((uint32_t)PWM_FREQ*i_Motor_Speed*90)/100000);  // set duty cycle for motor speed control, max 90% to avoid overcurrent
 }
 
@@ -434,8 +420,7 @@ void set_forward(enum Motor i_Motor){
         stop_motors();
         _delay_ms(50);
         
-         PORTB |= (1 << mPort);// forward
-
+        PORTB |= (1 << mPort);// forward
         current_dir[i_Motor] = 1;
     }
 }
@@ -456,7 +441,6 @@ void set_backward(enum Motor i_Motor){
         _delay_ms(50);
         
         PORTB &= ~ (1 << mPort); // backward  
-
         current_dir[i_Motor] = 2;
     }
 }
@@ -493,6 +477,25 @@ void turn_right(uint8_t speed){
     ctrlMotor(M2,speed);
 }
 
+void initTimer1(){
+    TCCR1A |= (1<<COM1A1) | (1<<COM1B1) | (1<<WGM11);
+    TCCR1B |= (1<<WGM13) | (1<<WGM12) | (1<<CS11); // prescaler = 8
+    ICR1 = PWM_FREQ; // PWM frequency = (16000000 Hz)/8/(TOP+1) = (1000 Hz)/8 = 125 Hz
+    OCR1A = 0; // duty cycle for pin OC1A (PB1) = 3999/15999 = 25%, assuming ICR1 = 15999
+    OCR1B = 0; // duty cycle for pin OC1B (PB2) = 11999/15999 = 75%, assuming ICR1 = 1599
+    DDRB |= (1 << PB0) | (1<<PB1) | (1<<PB2) | (1<< PB3); // output pins, globally set above already
+}
+
+void setTimerDC(enum Motor i_Motor, int dutyCycle){
+    switch (i_Motor){
+    case M1:    OCR1A = dutyCycle; // duty cycle for pin OC1A (PB1) 
+                break;
+    case M2:    OCR1B = dutyCycle; // duty cycle for pin OC1B (PB2) 
+                break;
+    default: TransmitString("No Motor selected\n");
+    };
+}
+
 
 int main(void) {
   do{} while (!initc());
@@ -501,8 +504,6 @@ int main(void) {
     {
         // Geschwindigkeit über POTI
         uint16_t speed = ReadADCSingleConversion(POT1);
-
-        //uint8_t speed = (poti * 100) / 1023;   // 0-100% aus 10-Bit ADC (0-1023)
 
         switch (rMode){
         case P: p_control_mode(speed); break;
