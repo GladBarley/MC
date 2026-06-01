@@ -55,8 +55,8 @@ void forward(enum Motor i_Motor);
 void backward(enum Motor i_Motor);
 void run_forward(uint16_t speed);
 void run_backward(uint16_t speed);
-void left(uint16_t speed);
-void right(uint16_t speed);
+void tleft(uint16_t speed);
+void tright(uint16_t speed);
 void TimerPWM(enum Motor i_Motor, int dutyCycle);
 
 // --- Implementierungen ---
@@ -180,11 +180,17 @@ void pController(uint16_t base_speed){
 
         if(last_line_pos == 1) {
             // Linie war zuletzt links
-            left(search_speed);
+            forward(M1);
+            set_Motor(M1, base_speed);
+            backward(M2);
+            set_Motor(M2, base_speed);
         } 
         else if (last_line_pos == -1) {
             // Linie war zuletzt rechts
-            right(search_speed);
+            forward(M2);
+            set_Motor(M2, base_speed);
+            backward(M1);
+            set_Motor(M1, base_speed);
         }
         else {
             // Edge Case beim Start
@@ -193,7 +199,7 @@ void pController(uint16_t base_speed){
     }
 }
 
-// KORRIGIERT: Eindeutiger Funktionsname, korrekte Funktionsaufrufe
+
 void calibrate_safe_threshold_kp(void){
     uint16_t whitethreshold;
     uint16_t diff_thershold;
@@ -219,7 +225,6 @@ void calibrate_safe_threshold_kp(void){
     _delay_ms(5000);
 }
 
-// KORRIGIERT: Implementierung für flash_led hinzugefügt
 void flash_led(uint8_t times){
     while (times--){
         PORTB |= (1 << PORTB5);   // LED an
@@ -293,10 +298,10 @@ void bangBang(uint16_t speed){
         run_forward(speed/1.75);
     }
     else if(left_black && !right_black){
-        left(speed/1.75);
+        tleft(speed/1.75);
     }
     else if(!left_black && right_black){
-        right(speed/1.75);
+        tright(speed/1.75);
     }
     else{
         run_backward(speed/1.75);
@@ -313,11 +318,11 @@ void stop_motors(void){
 }
 
 void forward(enum Motor i_Motor){
-    int mPort = 0;  // select Motor Port
+    int Port = 0;  
     switch (i_Motor){
-    case M1:    mPort = PB0;
+    case M1:    Port = PB0;
                 break;
-    case M2:    mPort = PB3;
+    case M2:    Port = PB3;
                 break;
     };
 
@@ -326,17 +331,17 @@ void forward(enum Motor i_Motor){
         stop_motors();
         _delay_ms(50);
         
-        PORTB |= (1 << mPort);
+        PORTB |= (1 << Port);
         current_dir[i_Motor] = 1;
     }
 }
 
 void backward(enum Motor i_Motor){
-    int mPort = 0;  // select Motor Port
+    int Port = 0;  // select Motor Port
     switch (i_Motor){
-    case M1:    mPort = PB0;
+    case M1:    Port = PB0;
                 break;
-    case M2:    mPort = PB3;
+    case M2:    Port = PB3;
                 break;
     };
 
@@ -345,7 +350,7 @@ void backward(enum Motor i_Motor){
         stop_motors();
         _delay_ms(50);
         
-        PORTB &= ~ (1 << mPort);
+        PORTB &= ~ (1 << Port);
         current_dir[i_Motor] = 2;
     }
 }
@@ -366,7 +371,7 @@ void run_backward(uint16_t speed){
     set_Motor(M2, speed);
 }
 
-void left(uint16_t speed){      
+void tleft(uint16_t speed){      
     forward(M1);
     forward(M2);
 
@@ -374,7 +379,7 @@ void left(uint16_t speed){
     set_Motor(M2, speed);
 }
 
-void right(uint16_t speed){
+void tright(uint16_t speed){
     forward(M1);
     forward(M2);
 
@@ -385,9 +390,9 @@ void right(uint16_t speed){
 void initTimerPWM(){
     TCCR1A |= (1<<COM1A1) | (1<<COM1B1) | (1<<WGM11);
     TCCR1B |= (1<<WGM13) | (1<<WGM12) | (1<<CS11); // prescaler = 8
-    ICR1 = PWM_FREQ; // PWM frequency = (16000000 Hz)/8/(TOP+1) = (1000 Hz)/8 = 125 Hz
-    OCR1A = 0; // duty cycle for pin OC1A (PB1) = 3999/15999 = 25%, assuming ICR1 = 15999
-    OCR1B = 0; // duty cycle for pin OC1B (PB2) = 11999/15999 = 75%, assuming ICR1 = 1599
+    ICR1 = PWM_FREQ; // PWM  = 125 Hz
+    OCR1A = 0;
+    OCR1B = 0;
     DDRB |= (1 << PB0) | (1<<PB1) | (1<<PB2) | (1<< PB3);
 }
 
@@ -417,7 +422,7 @@ int main(void) {
         if(!(PIND & (1 << CALIB_PIN)))
         {
             switch (rMode){
-            case P: calibrate_safe_threshold_kp(); break; // KORRIGIERT: Aufruf angepasst
+            case P: calibrate_safe_threshold_kp(); break; // Aufruf angepasst
             case BangBang: calibrate_safe_threshold(); break;
             };
         }
